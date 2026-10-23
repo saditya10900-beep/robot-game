@@ -1,0 +1,223 @@
+
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aditya Robot Battle</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#080d1b;color:white;font-family:Arial;text-align:center;overflow:hidden}
+h2{margin:10px;color:#00f5ff;text-shadow:0 0 12px #00f5ff}
+#hud{display:flex;justify-content:space-around;padding:8px;background:#141e33;font-weight:bold}
+canvas{display:block;width:100%;height:65vh;background:#101b30}
+#message{position:absolute;top:27%;left:0;width:100%;font-size:25px;color:#ffe600;text-shadow:0 0 10px black}
+.controls{display:flex;justify-content:center;gap:10px;padding:12px}
+button{border:2px solid #00eaff;background:#142b49;color:white;border-radius:12px;padding:13px 17px;font-size:18px;font-weight:bold}
+#start{position:absolute;top:42%;left:50%;transform:translateX(-50%);z-index:2;background:#00bcd4;color:#06101c}
+</style>
+</head>
+<body>
+<h2>🤖 ADITYA ROBOT BATTLE ⚡</h2>
+<div id="hud">
+ <span>❤️ HP: <b id="hp">100</b></span>
+ <span>🏆 स्कोर: <b id="score">0</b></span>
+ <span>👾 दुश्मन: <b id="enemies">0</b></span>
+</div>
+<canvas id="game"></canvas>
+<div id="message">रोबोट की लड़ाई शुरू करो!</div>
+<button id="start">START GAME</button>
+<div class="controls">
+ <button id="left">⬅️</button>
+ <button id="fire">⚡ FIRE</button>
+ <button id="right">➡️</button>
+ <button id="jump">⬆️ JUMP</button>
+</div>
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+const hpText=document.getElementById("hp");
+const scoreText=document.getElementById("score");
+const enemiesText=document.getElementById("enemies");
+const message=document.getElementById("message");
+const start=document.getElementById("start");
+
+let W,H,player,enemy,shots,enemyShots,score,hp,playing;
+let keys={},lastShot=0,lastEnemyShot=0;
+let lastTime=0;
+
+function resize(){
+ const dpr=Math.min(devicePixelRatio||1,2);
+ W=innerWidth;H=innerHeight*.65;
+ canvas.width=W*dpr;canvas.height=H*dpr;
+ canvas.style.width=W+"px";canvas.style.height=H+"px";
+ ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+addEventListener("resize",resize);resize();
+
+function reset(){
+ player={x:W*.2,y:H*.73,jump:0};
+ enemy={x:W*.75,y:H*.73};
+ shots=[];enemyShots=[];score=0;hp=100;playing=true;
+ hpText.textContent=hp;scoreText.textContent=score;
+ message.textContent="दुश्मन रोबोट को हराओ!";
+ start.style.display="none";
+ updateHUD();
+}
+function updateHUD(){
+ enemiesText.textContent=playing?"1":"0";
+}
+start.onclick=reset;
+
+function bind(id,key){
+ const b=document.getElementById(id);
+ b.addEventListener("pointerdown",e=>{e.preventDefault();keys[key]=true});
+ ["pointerup","pointerleave","pointercancel"].forEach(ev=>
+ b.addEventListener(ev,()=>keys[key]=false));
+}
+bind("left","left");bind("right","right");
+bind("fire","fire");bind("jump","jump");
+
+addEventListener("keydown",e=>{
+ const k=e.key.toLowerCase();
+ if(["arrowleft","arrowright"," ","arrowup"].includes(k))e.preventDefault();
+ if(k==="arrowleft"||k==="a")keys.left=true;
+ if(k==="arrowright"||k==="d")keys.right=true;
+ if(k===" "||k==="f")keys.fire=true;
+ if(k==="arrowup"||k==="w")keys.jump=true;
+});
+addEventListener("keyup",e=>{
+ const k=e.key.toLowerCase();
+ if(k==="arrowleft"||k==="a")keys.left=false;
+ if(k==="arrowright"||k==="d")keys.right=false;
+ if(k===" "||k==="f")keys.fire=false;
+ if(k==="arrowup"||k==="w")keys.jump=false;
+});
+
+function drawRobot(x,y,color,enemyRobot=false,jump=0){
+ y-=jump;
+ // पैर
+ ctx.fillStyle="#26394f";
+ ctx.fillRect(x-20,y+25,15,27);
+ ctx.fillRect(x+5,y+25,15,27);
+ // शरीर
+ ctx.fillStyle=color;
+ ctx.fillRect(x-27,y-17,54,46);
+ // कवच
+ ctx.fillStyle="#9ffaff";
+ ctx.fillRect(x-20,y-10,40,5);
+ // सिर
+ ctx.fillStyle="#b9c7d8";
+ ctx.fillRect(x-23,y-49,46,32);
+ // आँखें
+ ctx.fillStyle=enemyRobot?"#ff2c56":"#00faff";
+ ctx.fillRect(x-15,y-39,10,7);
+ ctx.fillRect(x+5,y-39,10,7);
+ // एंटीना
+ ctx.strokeStyle=color;ctx.lineWidth=4;
+ ctx.beginPath();ctx.moveTo(x,y-49);ctx.lineTo(x+5,y-61);ctx.stroke();
+ // हाथ
+ ctx.fillStyle="#627c9d";
+ ctx.fillRect(x-39,y-12,12,32);
+ ctx.fillRect(x+27,y-12,12,32);
+ // बंदूक
+ ctx.fillStyle=enemyRobot?"#ff284e":"#00f5ff";
+ ctx.fillRect(x+25,y,24,8);
+}
+
+function drawBackground(){
+ ctx.fillStyle="#101b30";ctx.fillRect(0,0,W,H);
+ // चमकता हुआ फर्श
+ ctx.strokeStyle="#1d4160";ctx.lineWidth=1;
+ for(let x=0;x<W;x+=45){
+  ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();
+ }
+ for(let y=0;y<H;y+=40){
+  ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();
+ }
+ ctx.fillStyle="#1a344b";ctx.fillRect(0,H*.82,W,H*.18);
+ ctx.fillStyle="#00eaff";
+ ctx.fillRect(0,H*.82,W,3);
+}
+
+function fireShot(fromEnemy=false){
+ const source=fromEnemy?enemy:player;
+ const target=fromEnemy?player:enemy;
+ const y=source.y-20-(fromEnemy?0:player.jump);
+ shotsOrEnemy(fromEnemy,{
+  x:source.x+(fromEnemy?-30:35),
+  y:y,
+  vx:(target.x-source.x>0?1:-1)*6,
+  fromEnemy
+ });
+}
+function shotsOrEnemy(isEnemy,shot){
+ (isEnemy?enemyShots:shots).push(shot);
+}
+
+function gameOver(text){
+ playing=false;
+ message.textContent=text+" | स्कोर: "+score;
+ start.textContent="PLAY AGAIN";
+ start.style.display="block";
+ updateHUD();
+}
+
+function frame(time){
+ requestAnimationFrame(frame);
+ const dt=Math.min((time-lastTime)/16.67||1,2);
+ lastTime=time;
+ drawBackground();
+
+ if(playing){
+  if(keys.left)player.x-=4*dt;
+  if(keys.right)player.x+=4*dt;
+  player.x=Math.max(45,Math.min(W-55,player.x));
+  if(keys.jump&&player.jump===0)player.jump=55;
+  if(player.jump>0)player.jump=Math.max(0,player.jump-3*dt);
+
+  if(keys.fire&&time-lastShot>300){
+   fireShot(false);lastShot=time;
+  }
+  if(time-lastEnemyShot>1100){
+   fireShot(true);lastEnemyShot=time;
+  }
+
+  // दुश्मन रोबोट खिलाड़ी की ओर बढ़ता है
+  enemy.x+=Math.sign(player.x-enemy.x)*0.45*dt;
+  enemy.x=Math.max(50,Math.min(W-50,enemy.x));
+
+  for(let i=shots.length-1;i>=0;i--){
+   const s=shots[i];s.x+=s.vx*dt;
+   if(Math.abs(s.x-enemy.x)<35&&Math.abs(s.y-(enemy.y-20))<45){
+    shots.splice(i,1);score+=10;scoreText.textContent=score;
+    enemy.x=W*.72;
+   }else if(s.x<0||s.x>W)shots.splice(i,1);
+  }
+  for(let i=enemyShots.length-1;i>=0;i--){
+   const s=enemyShots[i];s.x+=s.vx*dt;
+   if(Math.abs(s.x-player.x)<35&&Math.abs(s.y-(player.y-20-player.jump))<48){
+    enemyShots.splice(i,1);hp=Math.max(0,hp-10);hpText.textContent=hp;
+    if(hp<=0)gameOver("🤖 तुम्हारा रोबोट हार गया!");
+   }else if(s.x<0||s.x>W)enemyShots.splice(i,1);
+  }
+  updateHUD();
+ }
+
+ drawRobot(player.x,player.y,"#087fbb",false,player.jump);
+ drawRobot(enemy.x,enemy.y,"#a7193f",true);
+
+ for(const s of shots){
+  ctx.fillStyle="#00f5ff";ctx.shadowColor="#00f5ff";ctx.shadowBlur=15;
+  ctx.fillRect(s.x,s.y,19,7);
+ }
+ for(const s of enemyShots){
+  ctx.fillStyle="#ff2c56";ctx.shadowColor="#ff2c56";ctx.shadowBlur=15;
+  ctx.fillRect(s.x,s.y,19,7);
+ }
+ ctx.shadowBlur=0;
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
